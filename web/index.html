@@ -4,11 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AppAnalyser</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:ital,wght@0,300..700;1,300..700&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <div class="grain" aria-hidden="true"></div>
   <aside class="sidebar">
-    <h1>AppAnalyser</h1>
+    <header class="brand">
+      <span class="brand-mark">App<em>Analyser</em></span>
+      <span class="brand-status"><span class="dot"></span>live</span>
+    </header>
     <nav>
       <button class="nav-btn active" data-page="databases">Databases</button>
       <button class="nav-btn" data-page="datastore">DataStore</button>
