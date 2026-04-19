@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AppAnalyser</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <h1>AppAnalyser</h1>
+    <nav>
+      <button class="nav-btn active" data-page="databases">Databases</button>
+      <button class="nav-btn" data-page="datastore">DataStore</button>
+      <button class="nav-btn" data-page="shared_prefs">Shared Prefs</button>
+      <button class="nav-btn" data-page="logs">Logs</button>
+    </nav>
+    <footer class="sidebar-footer">
+      <div class="muted">Export</div>
+      <div class="export-path" id="export-path">–</div>
+    </footer>
+  </aside>
+  <main class="content">
+    <div id="page-databases" class="page active"></div>
+    <div id="page-datastore" class="page"></div>
+    <div id="page-shared_prefs" class="page"></div>
+    <div id="page-logs" class="page"></div>
+  </main>
+  <script src="js/app.js"></script>
+</body>
+</html>

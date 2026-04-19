@@ -1,0 +1,24 @@
+# AppAnalyser config for the TravelAnimator export layout.
+# Paths are resolved relative to this file.
+
+proto_root = "../shared/src/commonMain/proto"
+
+proto_files = [
+    "user_prefs.proto",
+    "animation_state.proto",
+    "animation_style.proto",
+    "route.proto",
+    "export_config.proto",
+    "mcp_options.proto",
+]
+
+# Files matching this glob are decoded as androidx.datastore-preferences
+# (the built-in PreferenceMap schema) — rendered as a key/type/value table.
+datastore_preferences_glob = "*.preferences_pb"
+
+# Everything else under datastore/ is matched by exact filename to a proto
+# message FQN. These render as a collapsible JSON tree.
+[datastore_mapping]
+"user_prefs.pb"      = "UserPrefs"
+"route_data.pb"      = "RouteData"
+"animation_state.pb" = "AnimationState"

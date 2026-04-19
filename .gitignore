@@ -1,0 +1,7 @@
+web/data/*
+!web/data/.gitkeep
+__pycache__/
+*.pyc
+.venv/
+.idea/
+.vscode/
