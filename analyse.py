@@ -272,6 +272,24 @@ def _tree_node_count(obj: Any) -> int:
     return 1
 
 
+def analyse_meta(root: Path, data_dir: Path) -> dict:
+    path = root / "meta.json"
+    if not path.is_file():
+        return {"present": False}
+    try:
+        meta = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        return {"present": True, "error": f"invalid JSON: {exc}"}
+    (data_dir / "meta.json").write_text(json.dumps(meta))
+    return {
+        "present": True,
+        "file": "meta.json",
+        "applicationId": meta.get("applicationId"),
+        "versionName": meta.get("versionName"),
+        "exportedAt": meta.get("exportedAt"),
+    }
+
+
 def analyse_logs(root: Path, data_dir: Path) -> dict:
     logs_dir = root / "logs"
     if not logs_dir.is_dir():
@@ -357,6 +375,7 @@ def main() -> int:
 
         index = {
             "export": str(args.export.resolve()),
+            "meta":        analyse_meta(args.export, data_dir),
             "databases":   analyse_databases(args.export, data_dir / "databases"),
             "datastore":   analyse_datastore(args.export, data_dir / "datastore", pool, config),
             "shared_prefs": analyse_shared_prefs(args.export, data_dir / "shared_prefs"),
@@ -377,6 +396,14 @@ def _print_summary(index: dict) -> None:
     ds = index["datastore"]
     sp = index["shared_prefs"]
     lg = index["logs"]
+    meta = index["meta"]
+    if meta.get("present") and not meta.get("error"):
+        print(f"App: {meta.get('applicationId')} {meta.get('versionName')} "
+              f"· exported {meta.get('exportedAt')}")
+    elif meta.get("error"):
+        print(f"  ! meta.json: {meta['error']}")
+    else:
+        print("No meta.json in export.")
     print(f"Parsed: {len(dbs)} databases, {len(ds)} datastore files, "
           f"{len(sp)} shared-prefs files, {lg['count']} log entries.")
     unknown = [d for d in ds if d.get("kind") == "unknown"]

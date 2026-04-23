@@ -198,6 +198,7 @@ nav {
     letter-spacing: 0.05em;
     transition: color 0.16s var(--ease);
 }
+.nav-btn[data-page="overview"]::before     { content: "00"; }
 .nav-btn[data-page="databases"]::before    { content: "01"; }
 .nav-btn[data-page="datastore"]::before    { content: "02"; }
 .nav-btn[data-page="shared_prefs"]::before { content: "03"; }
@@ -290,6 +291,7 @@ h2::before {
     position: relative;
     top: -14px;
 }
+#page-overview     h2::before { content: "00 /"; }
 #page-databases    h2::before { content: "01 /"; }
 #page-datastore    h2::before { content: "02 /"; }
 #page-shared_prefs h2::before { content: "03 /"; }
@@ -716,6 +718,320 @@ table.kv td:nth-child(2) .pill {
     background: rgba(0, 0, 0, 0.2);
     border-left: 3px solid var(--line);
     margin-left: 3px;
+}
+
+/* ============================================================
+   Overview page
+   ============================================================ */
+
+.ov-card-label {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 500;
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    margin-bottom: 10px;
+}
+
+/* hero */
+.ov-hero {
+    background:
+        radial-gradient(ellipse 60% 120% at 85% 20%, var(--accent-soft), transparent 60%),
+        linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 22px 26px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 28px;
+    align-items: center;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+}
+.ov-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255, 240, 220, 0.03), transparent 40%);
+    pointer-events: none;
+}
+.ov-hero-label {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-bottom: 6px;
+}
+.ov-hero-app {
+    font-family: var(--font-mono);
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--accent-hi);
+    letter-spacing: -0.005em;
+    margin-bottom: 10px;
+    word-break: break-all;
+}
+.ov-hero-version {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.ov-version-name {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 28px;
+    font-weight: 400;
+    color: var(--fg);
+    line-height: 1;
+    letter-spacing: -0.01em;
+}
+.ov-version-code {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--fg-muted);
+    letter-spacing: 0.05em;
+}
+
+.ov-hero-side { text-align: right; }
+.ov-hero-when {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: var(--fg);
+    margin-bottom: 2px;
+}
+.ov-hero-rel {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 14px;
+    color: var(--fg-muted);
+}
+
+/* badges */
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    border: 1px solid transparent;
+}
+.badge-ok {
+    color: var(--success);
+    background: rgba(139, 198, 127, 0.10);
+    border-color: rgba(139, 198, 127, 0.28);
+}
+.badge-warn {
+    color: var(--warn);
+    background: rgba(232, 184, 74, 0.12);
+    border-color: rgba(232, 184, 74, 0.30);
+}
+
+/* grid of cards */
+.ov-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.ov-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+    position: relative;
+    transition: border 0.18s var(--ease), background 0.18s var(--ease);
+}
+.ov-card:hover { border-color: var(--line-strong); }
+.ov-empty { color: var(--fg-dim); font-family: var(--font-display); font-style: italic; }
+
+/* device card */
+.ov-device-name {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-style: italic;
+    color: var(--fg);
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+}
+.ov-device-sub {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--fg-muted);
+    margin-top: 4px;
+    letter-spacing: 0.02em;
+}
+.ov-dl {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+.ov-dl dt {
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 9.5px;
+    align-self: center;
+}
+.ov-dl dd { color: var(--fg-soft); word-break: break-all; }
+
+/* android card + SDK scale */
+.ov-android-name {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-style: italic;
+    color: var(--fg);
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+}
+.ov-android-api {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent-hi);
+    letter-spacing: 0.04em;
+    margin-top: 4px;
+}
+.ov-sdk-scale {
+    position: relative;
+    margin-top: 22px;
+    padding-bottom: 18px;
+}
+.ov-sdk-track {
+    height: 4px;
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+}
+.ov-sdk-fill {
+    height: 100%;
+    background: linear-gradient(90deg,
+        rgba(123, 192, 207, 0.5) 0%,
+        rgba(139, 198, 127, 0.6) 40%,
+        var(--accent) 100%);
+    box-shadow: 0 0 10px var(--accent-strong);
+}
+.ov-sdk-marker {
+    position: absolute;
+    top: -4px;
+    transform: translateX(-50%);
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 10px var(--accent-hi);
+}
+.ov-sdk-marker span {
+    position: absolute;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--accent-hi);
+    white-space: nowrap;
+}
+.ov-sdk-ticks {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    color: var(--fg-dim);
+    letter-spacing: 0.08em;
+}
+
+/* ABI chips */
+.ov-abi-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+.ov-abi {
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: rgba(123, 192, 207, 0.08);
+    border: 1px solid rgba(123, 192, 207, 0.22);
+    color: var(--info);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+}
+
+/* locale & tz */
+.ov-locale-row {
+    display: flex;
+    gap: 18px;
+    align-items: baseline;
+    flex-wrap: wrap;
+    margin-top: 2px;
+}
+.ov-locale-tag {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 22px;
+    color: var(--fg);
+    letter-spacing: -0.01em;
+}
+.ov-tz {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--fg-soft);
+}
+.ov-tz-off {
+    color: var(--fg-muted);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+}
+
+/* fingerprint */
+.ov-fp { margin-top: 4px; }
+.ov-fp-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.ov-fp-val {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1.55;
+    color: var(--fg-soft);
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    word-break: break-all;
+    white-space: pre-wrap;
+}
+
+/* overview responsive */
+@media (max-width: 860px) {
+    .ov-hero {
+        grid-template-columns: 1fr;
+        gap: 14px;
+        padding: 18px 18px;
+    }
+    .ov-hero-side { text-align: left; }
+    .ov-grid { grid-template-columns: 1fr; }
 }
 
 /* ============================================================

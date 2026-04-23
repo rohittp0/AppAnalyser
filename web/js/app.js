@@ -34,6 +34,186 @@ function activateChip(containerSel, chip) {
   chip.classList.add("active");
 }
 
+// ---------- overview ----------
+const ANDROID_RELEASES = {
+  21: "5.0 Lollipop", 22: "5.1 Lollipop", 23: "6.0 Marshmallow",
+  24: "7.0 Nougat", 25: "7.1 Nougat", 26: "8.0 Oreo", 27: "8.1 Oreo",
+  28: "9 Pie", 29: "10", 30: "11", 31: "12", 32: "12L",
+  33: "13", 34: "14", 35: "15", 36: "16",
+};
+const SDK_MIN = 21;
+const SDK_MAX = 36;
+
+async function renderOverview() {
+  const page = $("#page-overview");
+  const summary = INDEX.meta || {};
+  if (!summary.present) {
+    page.innerHTML = `
+      <h2>Overview</h2>
+      <div class="error-banner">No <code>meta.json</code> in export root — cannot show export identity.</div>`;
+    return;
+  }
+  if (summary.error) {
+    page.innerHTML = `
+      <h2>Overview</h2>
+      <div class="error-banner">meta.json parse error: ${escapeHtml(summary.error)}</div>`;
+    return;
+  }
+  const meta = await fetchJson(summary.file);
+  page.innerHTML = overviewHtml(meta);
+  wireOverview(meta);
+}
+
+function overviewHtml(m) {
+  const exportedAbs = fmtIso(m.exportedAt);
+  const exportedRel = relativeTime(m.exportedAt);
+  const buildBadge = m.debug
+    ? `<span class="badge badge-warn">debug</span>`
+    : `<span class="badge badge-ok">release</span>`;
+  const buildType = m.buildType ? `<span class="pill code">${escapeHtml(m.buildType)}</span>` : "";
+  const sdk = Number.isFinite(m.androidSdk) ? m.androidSdk : null;
+  const release = m.androidRelease || (sdk != null ? ANDROID_RELEASES[sdk] : null) || "—";
+  const abis = (m.supportedAbis || "").split(",").map(s => s.trim()).filter(Boolean);
+  const deviceTitle = [m.model, m.manufacturer].filter(Boolean).join(" · ") || "—";
+  const brandProduct = [m.brand, m.product].filter(Boolean).join(" / ") || "—";
+  const locale = m.locale || "—";
+  const tz = m.timezone || null;
+  const tzOffset = tz ? formatTzOffset(tz) : "";
+  const identity = [];
+  if (m.deviceName) identity.push({ label: "device name", value: m.deviceName });
+  if (m.deviceId) identity.push({ label: "device id", value: m.deviceId });
+
+  return `
+    <h2>Overview</h2>
+
+    <div class="ov-hero">
+      <div class="ov-hero-main">
+        <div class="ov-hero-label">Application</div>
+        <div class="ov-hero-app">${escapeHtml(m.applicationId || "—")}</div>
+        <div class="ov-hero-version">
+          <span class="ov-version-name">${escapeHtml(m.versionName || "—")}</span>
+          <span class="ov-version-code">build ${escapeHtml(String(m.versionCode ?? "—"))}</span>
+          ${buildType}
+          ${buildBadge}
+        </div>
+      </div>
+      <div class="ov-hero-side">
+        <div class="ov-hero-label">Exported</div>
+        <div class="ov-hero-when">${escapeHtml(exportedAbs)}</div>
+        <div class="ov-hero-rel">${escapeHtml(exportedRel)}</div>
+      </div>
+    </div>
+
+    <div class="ov-grid">
+      <section class="ov-card ov-device">
+        <div class="ov-card-label">Device</div>
+        <div class="ov-device-name">${escapeHtml(deviceTitle)}</div>
+        <div class="ov-device-sub">${escapeHtml(brandProduct)}</div>
+        ${identity.length ? `
+          <dl class="ov-dl">
+            ${identity.map(r => `
+              <dt>${escapeHtml(r.label)}</dt>
+              <dd>${escapeHtml(r.value)}</dd>`).join("")}
+          </dl>` : ""}
+      </section>
+
+      <section class="ov-card ov-android">
+        <div class="ov-card-label">Android</div>
+        <div class="ov-android-name">${escapeHtml(release)}</div>
+        <div class="ov-android-api">API ${escapeHtml(String(sdk ?? "—"))}</div>
+        ${sdk != null ? sdkScaleHtml(sdk) : ""}
+      </section>
+
+      <section class="ov-card ov-abis">
+        <div class="ov-card-label">Supported ABIs</div>
+        ${abis.length
+          ? `<div class="ov-abi-list">${abis.map(a => `<span class="ov-abi">${escapeHtml(a)}</span>`).join("")}</div>`
+          : `<div class="ov-empty">—</div>`}
+      </section>
+
+      <section class="ov-card ov-locale">
+        <div class="ov-card-label">Locale &amp; Timezone</div>
+        <div class="ov-locale-row">
+          <span class="ov-locale-tag">${escapeHtml(locale)}</span>
+          ${tz ? `<span class="ov-tz">${escapeHtml(tz)}<span class="ov-tz-off">${escapeHtml(tzOffset)}</span></span>` : ""}
+        </div>
+      </section>
+    </div>
+
+    <section class="ov-card ov-fp">
+      <div class="ov-card-label">Build Fingerprint</div>
+      <div class="ov-fp-row">
+        <code class="ov-fp-val" id="ov-fp">${escapeHtml(m.fingerprint || "—")}</code>
+        ${m.fingerprint ? `<button class="action" id="ov-fp-copy">Copy</button>` : ""}
+      </div>
+    </section>`;
+}
+
+function sdkScaleHtml(sdk) {
+  const clamped = Math.max(SDK_MIN, Math.min(SDK_MAX, sdk));
+  const pct = ((clamped - SDK_MIN) / (SDK_MAX - SDK_MIN)) * 100;
+  return `
+    <div class="ov-sdk-scale" role="img" aria-label="Android API ${sdk} of ${SDK_MIN}–${SDK_MAX}">
+      <div class="ov-sdk-track"><div class="ov-sdk-fill" style="width: ${pct.toFixed(1)}%"></div></div>
+      <div class="ov-sdk-marker" style="left: ${pct.toFixed(1)}%"><span>${sdk}</span></div>
+      <div class="ov-sdk-ticks">
+        <span>${SDK_MIN}</span><span>${SDK_MAX}</span>
+      </div>
+    </div>`;
+}
+
+function wireOverview(m) {
+  const btn = $("#ov-fp-copy");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(m.fingerprint || "");
+      const old = btn.textContent;
+      btn.textContent = "Copied";
+      setTimeout(() => { btn.textContent = old; }, 1200);
+    } catch { /* ignore */ }
+  });
+}
+
+function fmtIso(s) {
+  if (!s) return "—";
+  const d = new Date(s);
+  if (isNaN(d)) return s;
+  // Use ISO-like but space separator and drop millis/zone noise.
+  return d.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
+}
+
+function relativeTime(s) {
+  if (!s) return "";
+  const d = new Date(s);
+  if (isNaN(d)) return "";
+  const diff = (Date.now() - d.getTime()) / 1000;
+  const abs = Math.abs(diff);
+  const future = diff < 0;
+  const pick = (n, unit) => {
+    const v = Math.round(n);
+    const word = v === 1 ? unit : `${unit}s`;
+    return future ? `in ${v} ${word}` : `${v} ${word} ago`;
+  };
+  if (abs < 45) return future ? "in moments" : "just now";
+  if (abs < 3600) return pick(abs / 60, "minute");
+  if (abs < 86400) return pick(abs / 3600, "hour");
+  if (abs < 2592000) return pick(abs / 86400, "day");
+  if (abs < 31536000) return pick(abs / 2592000, "month");
+  return pick(abs / 31536000, "year");
+}
+
+function formatTzOffset(tz) {
+  try {
+    const parts = new Intl.DateTimeFormat("en", {
+      timeZone: tz, timeZoneName: "longOffset",
+    }).formatToParts(new Date());
+    const off = parts.find(p => p.type === "timeZoneName");
+    if (off) return off.value.replace(/^GMT/, "UTC");
+  } catch { /* fall through */ }
+  return "";
+}
+
 // ---------- databases ----------
 async function renderDatabases() {
   const page = $("#page-databases");
@@ -376,13 +556,14 @@ async function boot() {
     btn.addEventListener("click", () => {
       const p = btn.dataset.page;
       setActivePage(p);
-      if (p === "databases") renderDatabases();
+      if (p === "overview") renderOverview();
+      else if (p === "databases") renderDatabases();
       else if (p === "datastore") renderDataStore();
       else if (p === "shared_prefs") renderSharedPrefs();
       else if (p === "logs") renderLogs();
     });
   });
-  renderDatabases();
+  renderOverview();
 }
 
 boot();
