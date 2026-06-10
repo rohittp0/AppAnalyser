@@ -8,11 +8,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install deps (requires `protoc` on PATH — `brew install protobuf`)
 pip install -r requirements.txt
 
-# Regenerate web/data/*.json from an unzipped export and start the UI at :8765
-python analyse.py --export <path-to-export-dir> --config config.example.toml
+# Single mode: --export is an export .zip → regenerate web/data/*.json and
+# start the UI at :8765
+python analyse.py --export <export.zip> --config config.example.toml
 
-# Useful flags: --port N, --no-open (skip auto-opening browser),
-#               --no-serve (only regenerate JSON, don't start HTTP server)
+# Multi mode: --export is a folder → every .zip inside is served from a
+# temp copy of web/ on port 8000+index (next free port if taken).
+python analyse.py --export <folder-of-zips> --config config.example.toml
+
+# Useful flags: --port N (single mode only), --no-open (skip auto-opening
+#               browser), --no-serve (only regenerate JSON, don't start
+#               HTTP server)
 ```
 
 There is no test suite, linter config, or build step. Iteration loop is:
@@ -43,6 +49,13 @@ object per line with `ts`/`lvl`/`tag`/`msg`/`thread`/`t` for traceback).
 Each section has a dedicated `analyse_*` function in `analyse.py` and
 produces a matching entry in `web/data/index.json` plus per-file JSON
 under `web/data/<section>/`. `web/data/` is wiped on every run.
+
+Input is always zipped: a single export `.zip` (extracted to a temp dir,
+data generated in-place into `web/data`), or a folder of `.zip`s (multi
+mode — `generate_data()` writes into a temp `copytree` copy of `web/`
+per zip). `resolve_export_root()` descends through single-directory
+wrappers inside a zip until it finds a known section. Temp dirs live
+until the servers are stopped (Ctrl-C).
 
 ### DataStore proto decoding
 

@@ -19,19 +19,25 @@ sudo apt-get install -y protobuf-compiler
 
 ## Run
 
-Unzip the export zip first (e.g. into `~/Downloads/ta-export/`), then:
+`--export` takes the export `.zip` itself, or a folder containing several
+export zips (auto-detected):
 
 ```bash
 cd AppAnalyser
 pip install -r requirements.txt
-python analyse.py --export ~/Downloads/ta-export --config config.example.toml
+
+# Single zip — parses into web/data/*.json, serves at http://127.0.0.1:8765/
+python analyse.py --export ~/Downloads/ta-export.zip --config config.example.toml
+
+# Folder of zips — every .zip inside gets its own temp copy of web/ and its
+# own server on port 8000, 8001, … (one browser tab per export)
+python analyse.py --export ~/Downloads/exports/ --config config.example.toml
 ```
 
-That parses the export into `web/data/*.json` and starts a local server at
-<http://127.0.0.1:8765/>. A browser tab auto-opens unless you pass
-`--no-open`. Pass `--no-serve` to only regenerate the JSON.
+A browser tab auto-opens unless you pass `--no-open`. Pass `--no-serve` to
+only regenerate the JSON. If a port is taken, the next free one is used.
 
-Other flags: `--port <n>` changes the bind port.
+Other flags: `--port <n>` changes the bind port in single-zip mode.
 
 ## Config
 

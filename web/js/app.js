@@ -3,6 +3,7 @@
 // ---------- state ----------
 let INDEX = null;
 let LOGS = null;
+const HIDDEN_LOG_TAGS = new Set(); // tags hidden by clicking a log row
 const CACHE = new Map(); // file path -> parsed JSON
 
 // ---------- utils ----------
@@ -84,7 +85,7 @@ function overviewHtml(m) {
   if (m.deviceId) identity.push({ label: "device id", value: m.deviceId });
 
   return `
-    <h2>Overview</h2>
+    <h2>Overview <button class="action" id="ov-copy-json" title="Copy all meta.json fields">Copy JSON</button></h2>
 
     <div class="ov-hero">
       <div class="ov-hero-main">
@@ -163,11 +164,15 @@ function sdkScaleHtml(sdk) {
 }
 
 function wireOverview(m) {
-  const btn = $("#ov-fp-copy");
+  wireCopyButton($("#ov-fp-copy"), () => m.fingerprint || "");
+  wireCopyButton($("#ov-copy-json"), () => JSON.stringify(m, null, 2));
+}
+
+function wireCopyButton(btn, getText) {
   if (!btn) return;
   btn.addEventListener("click", async () => {
     try {
-      await navigator.clipboard.writeText(m.fingerprint || "");
+      await navigator.clipboard.writeText(getText());
       const old = btn.textContent;
       btn.textContent = "Copied";
       setTimeout(() => { btn.textContent = old; }, 1200);
@@ -476,11 +481,24 @@ async function renderLogs() {
       ${["V","D","I","W","E","A"].map(l =>
         `<label><input type="checkbox" class="log-lvl" value="${l}" checked>${l}</label>`).join("")}
     </div>
+    <div class="hidden-tags" id="log-hidden-tags"></div>
     <div class="log-pane" id="log-pane"></div>`;
 
   ["log-from", "log-to", "log-tag", "log-grep"].forEach(id =>
     $(`#${id}`).addEventListener("input", applyLogFilter));
   $$(".log-lvl").forEach(cb => cb.addEventListener("change", applyLogFilter));
+  $("#log-pane").addEventListener("click", ev => {
+    const row = ev.target.closest(".log-row");
+    if (!row || row.dataset.tag === undefined) return;
+    HIDDEN_LOG_TAGS.add(row.dataset.tag);
+    applyLogFilter();
+  });
+  $("#log-hidden-tags").addEventListener("click", ev => {
+    const chip = ev.target.closest(".tag-chip");
+    if (!chip) return;
+    HIDDEN_LOG_TAGS.delete(chip.dataset.tag);
+    applyLogFilter();
+  });
   applyLogFilter();
 }
 
@@ -493,11 +511,14 @@ function applyLogFilter() {
   const fromZ = from ? localToIso(from) : null;
   const toZ = to ? localToIso(to) : null;
 
+  renderHiddenTagChips();
+
   const pane = $("#log-pane");
   const rows = [];
   let total = 0;
   for (const e of LOGS) {
     if (!levels.has(e.lvl)) continue;
+    if (HIDDEN_LOG_TAGS.has(e.tag || "—")) continue;
     if (fromZ && (e.ts || "") < fromZ) continue;
     if (toZ && (e.ts || "") > toZ) continue;
     if (tagRe && !tagRe.test(e.tag || "")) continue;
@@ -512,6 +533,15 @@ function applyLogFilter() {
     html = `<div class="empty" style="padding: 10px">no matches</div>`;
   }
   pane.innerHTML = html;
+}
+
+function renderHiddenTagChips() {
+  const box = $("#log-hidden-tags");
+  if (!box) return;
+  box.innerHTML = [...HIDDEN_LOG_TAGS].sort().map(t =>
+    `<span class="tag-chip" data-tag="${escapeHtml(t)}" title="Unhide tag ${escapeHtml(t)}">
+       ${escapeHtml(t)}<span class="tag-chip-x">×</span>
+     </span>`).join("");
 }
 
 function localToIso(v) {
@@ -534,7 +564,8 @@ function logRowHtml(e) {
   const tag = e.tag || "—";
   const thread = e.thread || "";
   const trace = e.t ? `<div class="log-traceback">${escapeHtml(e.t)}</div>` : "";
-  return `<div class="log-row log-${escapeHtml(lvl)}">
+  return `<div class="log-row log-${escapeHtml(lvl)}" data-tag="${escapeHtml(tag)}"
+      title="Click to hide tag ${escapeHtml(tag)}">
       <span class="log-ts">${escapeHtml(ts)}</span>
       <span class="log-lvl">${escapeHtml(lvl)}</span>
       <span class="log-thread" title="${escapeHtml(thread)}">${escapeHtml(thread)}</span>

@@ -7,6 +7,7 @@ import argparse
 import base64
 import http.server
 import json
+import shutil
 import socketserver
 import sqlite3
 import subprocess
@@ -16,6 +17,7 @@ import threading
 import tomllib
 import webbrowser
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -311,20 +313,84 @@ def analyse_logs(root: Path, data_dir: Path) -> dict:
 
 
 # --------------------------------------------------------------------------
+# Export resolution & data generation
+
+EXPORT_MARKERS = ("databases", "datastore", "shared_prefs", "logs", "meta.json")
+
+
+def resolve_export_root(root: Path) -> Path:
+    """Descend through single-directory wrappers (as zips often add one)
+    until a directory containing a known export section is found."""
+    cur = root
+    while not any((cur / m).exists() for m in EXPORT_MARKERS):
+        children = [p for p in cur.iterdir()
+                    if p.name not in ("__MACOSX",) and not p.name.startswith(".")]
+        if len(children) == 1 and children[0].is_dir():
+            cur = children[0]
+        else:
+            break
+    return cur
+
+
+def extract_zip(zip_path: Path, dest: Path) -> Path:
+    with zipfile.ZipFile(zip_path) as zf:
+        zf.extractall(dest)
+    return resolve_export_root(dest)
+
+
+def generate_data(export_root: Path, data_dir: Path, pool, config: dict) -> dict:
+    # Wipe previously generated data (keep data_dir itself).
+    if data_dir.exists():
+        for child in data_dir.rglob("*"):
+            if child.is_file():
+                child.unlink()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    index = {
+        "export": str(export_root.resolve()),
+        "meta":        analyse_meta(export_root, data_dir),
+        "databases":   analyse_databases(export_root, data_dir / "databases"),
+        "datastore":   analyse_datastore(export_root, data_dir / "datastore", pool, config),
+        "shared_prefs": analyse_shared_prefs(export_root, data_dir / "shared_prefs"),
+        "logs":        analyse_logs(export_root, data_dir),
+    }
+    (data_dir / "index.json").write_text(json.dumps(index))
+    return index
+
+
+# --------------------------------------------------------------------------
 # Server
 
-def serve(port: int, web_dir: Path, open_browser: bool) -> None:
-    handler_cls = http.server.SimpleHTTPRequestHandler
-
-    # Serve from web/ regardless of cwd.
-    class Handler(handler_cls):  # type: ignore[misc]
+def _make_handler(web_dir: Path) -> type:
+    # Serve from the given directory regardless of cwd.
+    class Handler(http.server.SimpleHTTPRequestHandler):  # type: ignore[misc]
         def __init__(self, *a, **kw):  # noqa: D401
             super().__init__(*a, directory=str(web_dir), **kw)
 
         def log_message(self, fmt, *args):  # silence default stderr spam
             sys.stderr.write(f"  {self.address_string()} {fmt % args}\n")
 
-    with socketserver.ThreadingTCPServer(("127.0.0.1", port), Handler) as httpd:
+    return Handler
+
+
+class _Server(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True  # rebind ports stuck in TIME_WAIT after a restart
+    daemon_threads = True
+
+
+def _bind_server(preferred: int, web_dir: Path,
+                 max_tries: int = 50) -> tuple[socketserver.ThreadingTCPServer, int]:
+    """Bind to `preferred`, or the next free port above it if taken."""
+    for port in range(preferred, preferred + max_tries):
+        try:
+            return _Server(("127.0.0.1", port), _make_handler(web_dir)), port
+        except OSError:
+            continue
+    raise SystemExit(f"no free port in range {preferred}-{preferred + max_tries - 1}")
+
+
+def serve(port: int, web_dir: Path, open_browser: bool) -> None:
+    httpd, port = _bind_server(port, web_dir)
+    with httpd:
         url = f"http://127.0.0.1:{port}/"
         print(f"AppAnalyser serving at {url}  (Ctrl-C to stop)")
         if open_browser:
@@ -335,59 +401,102 @@ def serve(port: int, web_dir: Path, open_browser: bool) -> None:
             print()
 
 
+def serve_multi(entries: list[tuple[str, int, Path]], open_browser: bool) -> None:
+    """Serve several web copies at once: (name, port, web_dir) per export."""
+    servers: list[socketserver.ThreadingTCPServer] = []
+    try:
+        for name, port, web_dir in entries:
+            httpd, port = _bind_server(port, web_dir)
+            threading.Thread(target=httpd.serve_forever, daemon=True).start()
+            servers.append(httpd)
+            url = f"http://127.0.0.1:{port}/"
+            print(f"AppAnalyser serving {name} at {url}")
+            if open_browser:
+                threading.Timer(0.4, lambda u=url: webbrowser.open(u)).start()
+        print("Ctrl-C to stop all servers.")
+        try:
+            threading.Event().wait()
+        except KeyboardInterrupt:
+            print()
+    finally:
+        for httpd in servers:
+            httpd.shutdown()
+            httpd.server_close()
+
+
 # --------------------------------------------------------------------------
+
+MULTI_BASE_PORT = 8000
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--export", required=True, type=Path,
-                    help="Path to the unzipped export folder "
-                         "(expects databases/, datastore/, shared_prefs/, logs/).")
+                    help="A single export .zip (single mode, served at --port), or a "
+                         "folder of export .zips — each zip is served from a temp copy "
+                         f"of web/ on ports {MULTI_BASE_PORT}, {MULTI_BASE_PORT + 1}, …")
     ap.add_argument("--config", required=True, type=Path, help="TOML config file.")
-    ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--port", type=int, default=8765,
+                    help="Port for single mode (ignored in multi-zip mode).")
     ap.add_argument("--no-open", action="store_true", help="Do not auto-open a browser.")
     ap.add_argument("--no-serve", action="store_true",
                     help="Only regenerate data JSON, do not start the HTTP server.")
     args = ap.parse_args()
 
-    if not args.export.is_dir():
-        raise SystemExit(f"{args.export} is not a directory")
+    path: Path = args.export
+    single_zip: Path | None = None
+    zips: list[Path] = []
+    if path.is_file() and zipfile.is_zipfile(path):
+        single_zip = path
+    elif path.is_dir():
+        zips = sorted(p for p in path.glob("*.zip") if zipfile.is_zipfile(p))
+        if not zips:
+            raise SystemExit(f"{path} contains no .zip files")
+    else:
+        raise SystemExit(f"{path} is neither a zip file nor a directory")
 
     config = load_config(args.config)
 
     script_dir = Path(__file__).resolve().parent
     web_dir = script_dir / "web"
-    data_dir = web_dir / "data"
-
-    # Wipe previously generated data (keep web/data/ itself).
-    if data_dir.exists():
-        for child in data_dir.rglob("*"):
-            if child.is_file():
-                child.unlink()
-    data_dir.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(prefix="appanalyser_") as tmp_s:
         tmp = Path(tmp_s)
         proto_root_cfg = config.get("proto_root")
         proto_root = (args.config.parent / proto_root_cfg).resolve() if proto_root_cfg else None
         proto_files = config.get("proto_files", [])
-        desc_path = compile_protos(proto_root, proto_files, tmp)
+        proto_tmp = tmp / "protos"
+        proto_tmp.mkdir()
+        desc_path = compile_protos(proto_root, proto_files, proto_tmp)
         pool = build_pool(desc_path)
 
-        index = {
-            "export": str(args.export.resolve()),
-            "meta":        analyse_meta(args.export, data_dir),
-            "databases":   analyse_databases(args.export, data_dir / "databases"),
-            "datastore":   analyse_datastore(args.export, data_dir / "datastore", pool, config),
-            "shared_prefs": analyse_shared_prefs(args.export, data_dir / "shared_prefs"),
-            "logs":        analyse_logs(args.export, data_dir),
-        }
-        (data_dir / "index.json").write_text(json.dumps(index))
+        if single_zip:
+            root = extract_zip(single_zip, tmp / "export")
+            index = generate_data(root, web_dir / "data", pool, config)
+            _print_summary(index)
+            if args.no_serve:
+                return 0
+            serve(args.port, web_dir, open_browser=not args.no_open)
+            return 0
 
-    _print_summary(index)
+        entries: list[tuple[str, int, Path]] = []
+        for i, zip_path in enumerate(zips):
+            root = extract_zip(zip_path, tmp / f"export_{i}")
+            web_copy = tmp / f"web_{i}"
+            # Copy web/ without stale generated data; each copy gets its own data/.
+            shutil.copytree(
+                web_dir, web_copy,
+                ignore=lambda d, names: ["data"] if Path(d) == web_dir else [],
+            )
+            index = generate_data(root, web_copy / "data", pool, config)
+            print(f"[{zip_path.name}]")
+            _print_summary(index)
+            entries.append((zip_path.name, MULTI_BASE_PORT + i, web_copy))
 
-    if args.no_serve:
-        return 0
-    serve(args.port, web_dir, open_browser=not args.no_open)
+        if args.no_serve:
+            print("--no-serve: generated data lives in a temp dir and is discarded on exit.")
+            return 0
+        serve_multi(entries, open_browser=not args.no_open)
     return 0
 
 

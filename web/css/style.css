@@ -505,6 +505,7 @@ button.action:hover {
     color: var(--accent);
 }
 button.action:active { transform: translateY(1px); }
+h2 button.action { align-self: center; margin-left: auto; }
 
 /* ============================================================
    Tables
@@ -664,8 +665,44 @@ table.kv td:nth-child(2) .pill {
     border-left: 3px solid transparent;
     transition: background 0.08s var(--ease);
 }
+.log-row { cursor: pointer; }
 .log-row:hover { background: rgba(255, 240, 220, 0.03); }
 .log-row > span { overflow: hidden; text-overflow: ellipsis; }
+
+/* hidden-tag chips (click a log row to hide its tag; click chip to unhide) */
+.hidden-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 10px;
+}
+.hidden-tags:empty { display: none; }
+.tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--violet);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s var(--ease),
+                border     0.15s var(--ease);
+}
+.tag-chip:hover {
+    background: var(--panel-hover);
+    border-color: var(--line-strong);
+}
+.tag-chip .tag-chip-x {
+    color: var(--fg-dim);
+    font-size: 13px;
+    line-height: 1;
+}
+.tag-chip:hover .tag-chip-x { color: var(--fg); }
 .log-row .log-msg {
     white-space: pre-wrap;
     word-break: break-word;
